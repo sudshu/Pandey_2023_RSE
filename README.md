@@ -6,7 +6,7 @@ Code for methane plume detection and quantification using Sentinel-5p (TROPOMI),
 The Methane_MSI folder includes code for both Sentinel-2 and Landsat. This code retrieves satellite data from Google Earth Engine, which requires configuring an Earth Engine Python API.
 https://developers.google.com/earth-engine/tutorials/community/intro-to-python-api
 
-## Sentin3l-3 
+## Sentinel-3 
 The Sentinel-3 folder handles the downloading and processing of Sentinel-3 SWIR data. To obtain Sentinel-3 SLSTR observations, the Sentinelsat API https://scihub.copernicus.eu/dhus/#/home must be configured locally by the user.
 
 
