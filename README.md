@@ -1,5 +1,5 @@
 # Methane Plume Detection 
-Code for methane plume detection and quantification using Sentinel-5p (TROPOMI), Sentinel-2, Sentinel-3, and Landsat instrument
+Code for methane plume detection and quantification using Sentinel-2, Sentinel-3, and Landsat instruments
 
 ## Methane_MSI
 
