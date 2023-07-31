@@ -17,7 +17,6 @@ from datetime import datetime,date,timedelta
 
 '''
 
-Authors: Sudhanshu Pandey, Pratik Sutar, Paul Tol
 Email: sudhanshu.pandey@jpl.nasa.gov
 Institute: SRON Netherlands Institute for Space Research, Jet Propulsion Laboratory, Caltech, USA 
 
