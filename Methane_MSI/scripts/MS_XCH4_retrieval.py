@@ -1331,7 +1331,25 @@ def checkGeosFPFile(cur_time):
                wget.download(online_path)
                
         return fname
-        
+
+
+def checkShape(red, red_old):
+     red= red.flatten()
+     red_old = red_old.flatten()
+     print (red.shape, red_old.shape, end = " ")
+     if not red.shape == red_old.shape:
+          if len(red.shape) == 2:
+            fshape1 = amin([red.shape[0], red_old.shape[0]]  )
+            fshape2= amin([red.shape[1], red_old.shape[1]]  )
+            red= red[:fshape1, :][:, :fshape2]
+            red_old= red_old[:fshape1,:][:, :fshape2]
+          if len(red.shape)== 1:
+            fshape1 = amin([red.shape[0], red_old.shape[0]]  )
+            red= red[:fshape1]
+            red_old= red_old[:fshape1]
+     print ("after ", red.shape, red_old.shape)
+     return red, red_old
+
 def geosFPatTimeLocation(  lon0, lat0, cur_time, verbose= False):
         import netCDF4 as nc4
         fname = checkGeosFPFile(cur_time)
