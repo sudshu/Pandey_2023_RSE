@@ -63,10 +63,9 @@ class ch4ret:
     self.coeff=np.zeros(6)
     self.markers=[[]]
     self.cdata={}
-    self.thres=50 
-    if self.TOA_satellite == 'S2': self.thres=10
-    if self.TOA_satellite == 'L8': self.thres=50 
-    if self.TOA_satellite == 'L8': self.thres=50 
+    self.thres=50
+    if self.TOA_satellite == 'S2':
+        self.thres=10
     
     self.verbose = verbose
     self.area= area

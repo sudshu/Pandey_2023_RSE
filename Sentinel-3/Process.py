@@ -56,7 +56,17 @@ VERBOSE = True
 ##         LOAD CASE INPUTS       ##
 ####################################
 
-from Inputs import algeria_accident_input, iraq_input, kazakhstan_input, moscow_1_input, moscow_2_input, moscow_both_input, permian_input, varon_algeria_input, varon_turkmenistan_input, iraq_input, kazakhstan_input
+from Inputs import (
+    algeria_accident_input,
+    iraq_input,
+    kazakhstan_input,
+    moscow_1_input,
+    moscow_2_input,
+    moscow_both_input,
+    permian_input,
+    varon_algeria_input,
+    varon_turkmenistan_input,
+)
 
 input_dict = {
     'Algeria_Accident': algeria_accident_input,
