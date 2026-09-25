@@ -13,6 +13,22 @@ import pickle
 import sys
 from pylab import *
 from datetime import datetime,date,timedelta
+from contextlib import contextmanager
+
+# Input files (HITRAN line lists, atmosphere profiles, solar spectra) and outputs
+# (absorption cross-section csv files, lookup tables) live in data_files/ next to this script.
+# See data_files/README.md for a description of each file.
+DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data_files")
+
+@contextmanager
+def in_data_dir():
+    """Temporarily switch to DATA_DIR, independent of the directory the code is run from."""
+    cwd = os.getcwd()
+    os.chdir(DATA_DIR)
+    try:
+        yield
+    finally:
+        os.chdir(cwd)
 
 
 '''
@@ -493,7 +509,7 @@ class ch4ret:
       w=np.round(w,2)
       
       for i in range(w.shape[0]):
-          index=int(np.where(Edata[:,0]==w[i])[0])
+          index=np.where(Edata[:,0]==w[i])[0][0]
           E_lambda[i]=Edata[index,1]
 
       
@@ -519,7 +535,7 @@ class ch4ret:
           T12_del,dump=self.radianceCalc(del_omega,'SWIR2')
           T12,dump=self.radianceCalc(0,'SWIR2')
           m=(T12_del-T12)/T12
-      elif method=='MBSP' or 'MBMP':
+      elif method in ('MBSP', 'MBMP'):
           T12_del,dump=self.radianceCalc(del_omega,'SWIR2')
           T12,dump=self.radianceCalc(0,'SWIR2')
           T11_del,dump=self.radianceCalc(del_omega,'SWIR1')
@@ -597,7 +613,7 @@ def radianceCalc(del_omega,band, satellite, sza= 0, vza= 0, layer = 0, scaleb= 1
       w=np.round(w,2)
       
       for i in range(w.shape[0]):
-          index=int(np.where(Edata[:,0]==w[i])[0])
+          index=np.where(Edata[:,0]==w[i])[0][0]
           E_lambda[i]=Edata[index,1]
 
       
@@ -719,55 +735,56 @@ def giveOpticalDepth(satellite ):
 
 
 
-def CreateAbsorptionCrossSections(sat= "S3"):
-    os.chdir("./data_files")
-    atmfile= ['atmosphere_europebackground.dat','atmosphere_subarcticsummer.dat','atmosphere_subarcticwinter.dat','atmosphere_tropical.dat', "atmosphere_midlatitudewinter.dat", "atmosphere_midlatitudesummer.dat","atmosphere_standard.dat" ]
-    for aa in atmfile: 
-        print (aa, os.path.exists(aa))
-    method=['SBMP','MBMP']
-  
-    sza=np.arange(0,75,5)
-    x1=np.arange(-2,5.1,0.1)
-    x2=np.arange(5.5,15.5,0.5)
-    obj= ch4ret(sza= 0, vza= 0, satellite = sat)
-    x=np.concatenate((x1,x2))
-    mdata={}
-    for a in range(len(atmfile)):
-      obj.atm_filename=atmfile[a]
-      obj.abCalc('SWIR1')
-      obj.abCalc('SWIR2')
-    os.chdir("../")  
-
-def plotOpticalDepths():
+def CreateAbsorptionCrossSections(sat= "S3", atmfile= 'atmosphere_midlatitudewinter.dat'):
     """
-    This function calculates optical depths for atmospheric gases and plots them using matplotlib. It's useful for visualizing the effect of gases on overall optical depth.
-    """    
-    os.chdir("./data_files")
-    obj= ch4ret()
-    obj.atm_filename='atmosphere_midlatitudewinter.dat'
-    obj.abCalc('SWIR1')
-    obj.abCalc('SWIR2')
-    
-    T11,optd_B11=obj.radianceCalc(0,'SWIR2', sza= 0, vza = 0)
-    T11_,optd_B11_=obj.radianceCalc(1,'SWIR2', sza= 0, vza = 0)      
-      
-    plt.plot(optd_B11[:,0],optd_B11[:,1])
-    plt.plot(optd_B11[:,0],optd_B11[:,2])
-    plt.plot(optd_B11[:,0],optd_B11[:,3])
+    Compute the absorption cross sections of H2O, CO2, N2O, CO and CH4 in the SWIR1 and SWIR2 bands of
+    satellite sat ('S2', 'S3' or 'L8') for the atmosphere profile atmfile, and write them to
+    data_files/<sat>_absorption_cs_<gas>_<band>.csv (format described in data_files/README.md).
+
+    The csv file names do not contain the atmosphere profile, so computing several profiles in a row
+    overwrites the previous one. Use the same atmfile here as in createLookupTables / radianceCalc.
+    Available profiles in data_files/: atmosphere_europebackground.dat (23 layers), atmosphere_midlatitudesummer.dat,
+    atmosphere_midlatitudewinter.dat, atmosphere_subarcticsummer.dat, atmosphere_subarcticwinter.dat,
+    atmosphere_tropical.dat and atmosphere_standard.dat (24 layers each).
+    """
+    with in_data_dir():
+        if not os.path.exists(atmfile):
+            raise FileNotFoundError(f"{atmfile} not found in {DATA_DIR}")
+        obj= ch4ret(sza= 0, vza= 0, satellite = sat, atmfile= atmfile)
+        obj.abCalc('SWIR1')
+        obj.abCalc('SWIR2')
+
+def plotOpticalDepths(sat= "S3", band= "SWIR2", atmfile= 'atmosphere_midlatitudewinter.dat', recompute= False):
+    """
+    This function calculates vertical optical depths of H2O, CO2 and CH4 in one band and plots them using matplotlib.
+    It's useful for visualizing the effect of gases on overall optical depth.
+    The absorption cross-section csv files are recomputed only if they are missing or recompute=True
+    (this takes a while; the repository ships the S3 files).
+    """
+    with in_data_dir():
+        obj= ch4ret(sza= 0, vza= 0, satellite= sat, atmfile= atmfile)
+        if recompute or not os.path.exists('%s_absorption_cs_CH4_%s.csv'%(sat, band)):
+            obj.abCalc(band)
+
+        T,optd=obj.radianceCalc(0,band)
+
+    plt.plot(optd[:,0],optd[:,1])
+    plt.plot(optd[:,0],optd[:,2])
+    plt.plot(optd[:,0],optd[:,3])
     plt.yscale('log')
-    plt.xlabel('Wavelength')
-    plt.ylabel('Optical depth (tau_vert)')
+    plt.xlabel('Wavelength (nm)')
+    plt.ylabel('Vertical optical depth (tau_vert)')
+    plt.title('%s %s, %s'%(sat, band, atmfile))
     plt.legend(['H2O','CO2','CH4'])
-    plt.show()    
-    os.chdir("../")  
+    plt.show()
 
 def createLookupTables(sats= ["S3", "S2", "L8"]):
     """
     The function generates lookup tables for an atmospheric model based on different conditions. The main loop creates an instance of a class and calculates parameters for each combination of methods and air mass factors. The results are stored as a polynomial fit in a data dictionary and saved as a pickle file for later use.
     """
 
-    
-    os.chdir("./data_files")
+    cwd= os.getcwd()
+    os.chdir(DATA_DIR)
     methods=['MBMP']
     szas=np.arange(0,75,10)
     x1=np.arange(-2,5.1,0.2)
@@ -794,7 +811,7 @@ def createLookupTables(sats= ["S3", "S2", "L8"]):
             mdata[method]={}
             for amf in np.arange(2,10,0.5):
                 current_step += 1
-                sza= 180*math.acos(1/ (amf-1))/np.pi
+                sza= 180*acos(1/ (amf-1))/np.pi
                 mdata[method][amf]={}
                 
                 obj.sza= sza
@@ -815,7 +832,7 @@ def createLookupTables(sats= ["S3", "S2", "L8"]):
 
         pickle.dump(data, open(f'{sat}_full_mdata_poly_10_delr_to_omega.pkl', 'wb'))
         print(f"Data saved to {sat}_full_mdata_poly_10_delr_to_omega.pkl")
-    os.chdir("../")  
+    os.chdir(cwd)
 
 
 
