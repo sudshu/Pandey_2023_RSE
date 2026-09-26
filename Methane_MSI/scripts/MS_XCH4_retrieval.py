@@ -1189,31 +1189,14 @@ class ch4ret:
 
     """
 
-    import pickle    
-    pkl_file = open('lookup_tables/mdata_'+self.atm_filename.split('.',1)[0]+'.pkl', 'rb')
-    mdata = pickle.load(pkl_file)
-    pkl_file.close()
+    # Uses the lookup table shipped in data_files/ (test_srf_210104_delr_to_omega.pkl),
+    # keyed by satellite and total air mass factor. The old per-atmosphere tables in
+    # lookup_tables/ were never part of the repository (GitHub issue #3).
     delR=self.delR
-    del_omega=np.zeros(delR.shape)
     if delR.all()==0: return np.zeros(delR.shape),None
     if self.sza1>70:self.sza1=70
     if self.sza2>70:self.sza2=70
-    if self.method=="MBMP":
-      delR=self.delR
-      for i in range(delR.shape[0]):
-        for j in range(delR.shape[1]):
-          sza_key=5*round(self.sza1/5) # Rounding solar zenith angle to closest multiple of 5 degrees
-          data=mdata[self.method][sza_key]
-          del_omega[i,j]=min(data.keys(), key=(lambda k: (delR[i,j]-data[k])**2))
-           
-    else:
-      for i in range(delR.shape[0]):
-        for j in range(delR.shape[1]):
-          sza_key=5*round(self.sza1/5) # Rounding solar zenith angle to closest multiple of 5 degrees
-          data=mdata[self.method][sza_key]
-          del_omega[i,j]=min(data.keys(), key=(lambda k: (delR[i,j]-data[k])**2))
-
-   # del_omega=np.round(del_omega,2)
+    del_omega=fullMBMP2Omega(delR, self.TOA_satellite, self.sza1, self.vza1, method=self.method)
 
     fig, ax = plt.subplots(figsize=(10,10))
     plt.imshow(del_omega,cmap='RdBu_r')
@@ -1836,53 +1819,44 @@ def simpleFoliumMap(lng= 5.9053, lat= 31.6585,  main_date=datetime(2019,10,20), 
     return m
 
 
-def SeriesUsingPickleFile(case= None, pkl_file= None):
-    ''' This function used the pickle file create in SeriesXCH4Imag and can remake DelR images with altered seting'''
+def SeriesUsingPickleFile(case= None, pkl_file= None, lat= None, lng= None, area= 2, TOAsat= 'S2', windsat= 'ERA5', method= 'MBMP'):
+    ''' Remake the DelR images for every date stored in a plumedata pickle file written by ch4ret.seriesDelr.
+
+    The pickle file does not store the site location, so lat and lng of the site must be passed
+    (previously these came from a private ms_locations module that is not part of this repository, GitHub issue #4).
+    Returns a dictionary {date string: ch4ret object}.
+    '''
     if case is None and pkl_file is None:
         print ('Not enough valid inputs. Please provide a valid case or a pickle file')
         return
+    if lat is None or lng is None:
+        print ('Please provide lat and lng of the site used to create the pickle file')
+        return
 
-    if pkl_file is None:        pkl_fil= 'output/%s_plumedata.pkl'%case
-
-
-    from ms_locations import giveCaseParams
-    case= 'kazakistan'
-    lng, lat , start_date, ref_date, end_date = giveCaseParams(case)
-      
+    if pkl_file is None:
+        pkl_file= 'output/%s_plumedata_%s.pkl'%(case, TOAsat)
+        if not os.path.exists(pkl_file): pkl_file= 'output/%s_plumedata.pkl'%case
+    if case is None: case= os.path.basename(pkl_file).split('_plumedata')[0]
+    os.makedirs('output/%s'%case, exist_ok= True)
 
     dat= pickle.load(open(pkl_file, 'rb'))
+    objs= {}
     for day_str in dat.keys():
       print ('processing %s'%day_str)
       main_date = datetime.strptime(day_str, "%Y-%m-%d")
       ref_date  =  datetime.strptime(dat[day_str]["ref_date"], "%Y-%m-%d")
-      windsat='ERA5' # 'ERA5' or 'GFS' or 'GFS0P_Hourly'
-      TOAsat='S2' # 'S2' or 'L8'  or 'L7'
 
-      obj=ch4ret(main_date,ref_date,'MBMP',lat,lng,area,windsat,TOAsat)
+      obj=ch4ret(main_date,ref_date,method,lat,lng,area,windsat,TOAsat, case= case)
+      obj.delRcalc(ref_date,verbose=True,plot_option=True)
+      fig= obj.fig_delR
 
-      #ref_date=obj.ref_search(advance_range,date1,ref_date)
-      obj.delRcalc(ref_date,verbose=True,plot_option=True, olat=olat, olng=olng)
-      delR= obj.delR
-      fig= obj.fig_delR 
-
-    
       display(fig)
       image_fname = 'output/%s/%s.png'%(case,obj.TOA_satellite+'_delR_'+str(obj.main_date)[:10])
       fig.savefig(image_fname)
-      
-      return obj
-      
-      
-      obj = dayXCH4Image(lng=lng, lat=lat, case= case, area = 1, main_date= main_date, ref_date=ref_date )
-#      obj.
-      return obj
-#      fmap= obj.foliumMap(main_date, ref_date)
-#      fmap.save
-      image_fname = 'output/%s/%s.png'%(case,obj.TOA_satellite+'_delR_'+str(obj.main_date)[:10])
+      objs[day_str]= obj
+    return objs
 
-      obj.fig.savefig(image_fname)
-      
-      
+
 
 def f_young(za):
          za=radians(za)
@@ -1893,23 +1867,30 @@ def giveamf(sza, vza):
     rair=f_young(sza)+f_young(vza)
     return rair
 
-def fullMBMP2Omega(delr, satellite, sza, vza= 0 ):
+def fullMBMP2Omega(delr, satellite, sza, vza= 0, method= 'MBMP'):
+    ''' Convert a delR image to methane column enhancement del_omega (mol/m2) using the lookup table
+    data_files/test_srf_210104_delr_to_omega.pkl. The table holds band-integrated SWIR1 and SWIR2 radiances
+    for each satellite ('S2', 'L8', 'S3') and total air mass factor (keys '2.0' ... '4.9'), as a function of
+    the methane enhancements in mdata["omegas"] (0 to ~60 mol/m2).
+    Negative enhancements (positive delR, i.e. noise) are obtained by mirroring the table around zero.
+    '''
     import pickle
-    shape_omega=    delr.shape 
-    delr= delr.flatten()
-    mdata= pickle.load(open('data_files/test_srf_210104_delr_to_omega.pkl', 'rb'))
+    delr= np.asarray(delr, dtype= float)
+    fname= os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data_files', 'test_srf_210104_delr_to_omega.pkl')
+    mdata= pickle.load(open(fname, 'rb'))
     tamf = giveamf(sza,vza)
- #   print ("AMF", tamf, "%2.1f"%tamf)
-    ind_0 = where(mdata["omegas"]== 0 )
-    dat = mdata[satellite]["%2.1f"%tamf]
-    omega= zeros_like(delr)
+    amf_keys= np.array(sorted(mdata[satellite].keys(), key= float))
+    amf_key= amf_keys[argmin(abs(amf_keys.astype(float)- tamf))] # closest available air mass factor
+    dat = mdata[satellite][amf_key]
     aa= dat["SWIR2"]/ dat["SWIR2"][0]
     bb= dat["SWIR1"]/ dat["SWIR1"][0]
-    mbmp=  aa/bb-1
-    for ii, drr in enumerate(delr):
-        ind = argmin(abs(mbmp -  drr))
-        omega[ii]=mdata["omegas"][ind]
-    omega= omega.reshape(shape_omega)
+    if method=='SBMP': m= aa-1
+    else: m= aa/bb-1        # MBMP and MBSP
+    omegas= mdata["omegas"]
+    # m decreases monotonically with omega; build a symmetric, increasing (-m, omega) curve for interpolation
+    x= np.concatenate((m[:0:-1], -m))
+    y= np.concatenate((-omegas[:0:-1], omegas))
+    omega= np.interp(-delr, x, y)
     return omega
 
  
