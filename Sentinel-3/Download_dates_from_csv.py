@@ -22,8 +22,8 @@ months = dates_to_download['Months']
 years = dates_to_download['Years']
 
 # Account information
-username = 'maartensron'
-password = 'maartensron'
+username = 'YOUR_COPERNICUS_USERNAME'
+password = 'YOUR_COPERNICUS_PASSWORD'
 
 longitude = -102.14
 latitude = 31.40

@@ -19,8 +19,8 @@ day_range = 10
 date_end = date_start + td(days=day_range)
 
 # Account information
-username = 'maartensron'
-password = 'maartensron'
+username = 'YOUR_COPERNICUS_USERNAME'
+password = 'YOUR_COPERNICUS_PASSWORD'
 
 longitude = -95.13
 latitude = 32.51
